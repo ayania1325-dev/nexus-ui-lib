@@ -4537,17 +4537,13 @@ Library._buildSystemTabs = function(win, cfg)
 
 	------------------------------------------------ PERFORMANCE
 	if enabled("Performance") then
-		local tab = win:AddTab("Performance", "monitor", "Live client performance for this session.", { System = true })
+		local tab = win:AddTab("Performance", "monitor", "Live client performance.", { System = true })
 		local liveOn = true
 
 		local live = tab:AddSection("Live")
 		local stats = live:AddStats({ { Name = "FPS" }, { Name = "Ping", Suffix = "ms" }, { Name = "Memory", Suffix = "MB", Thousands = true } })
 		local fpsGraph = live:AddGraph({ Name = "Frame rate", Max = 144, Suffix = " fps", Tooltip = "Client frames per second" })
 		local pingGraph = live:AddGraph({ Name = "Ping", Max = 300, Suffix = " ms", Tooltip = "Round trip to the server" })
-
-		local session = tab:AddSection("Session", "Right")
-		local sessionStats = session:AddStats({ { Name = "Players" }, { Name = "In game", Suffix = "s", Thousands = true } })
-		local memBar = session:AddProgress({ Name = "Memory budget", Default = 0, Tooltip = "Client memory against a 2 GB budget" })
 
 		local tuning = tab:AddSection("Tuning", "Right")
 		if typeof(setfpscap) == "function" then
@@ -4575,9 +4571,6 @@ Library._buildSystemTabs = function(win, cfg)
 					stats:Set(1, fps); stats:Set(2, ping); stats:Set(3, mem)
 					fpsGraph:Push(fps)
 					pingGraph:Push(ping)
-					sessionStats:Set(1, #Players:GetPlayers())
-					sessionStats:Set(2, round(workspace.DistributedGameTime))
-					memBar:Set(math.clamp(mem / 2048 * 100, 0, 100))
 				end
 				task.wait(0.5)
 			end
@@ -4637,13 +4630,11 @@ Library._buildSystemTabs = function(win, cfg)
 	end
 
 	------------------------------------------------ SETTINGS
-	-- With the demo running this holds the full profile system. With NEXUS_NO_DEMO set it only
-	-- offers Unload (override either way with CreateWindow{ Profiles = true / false }).
-	if enabled("Settings") then
-		local profiles = cfg.Profiles
-		if profiles == nil then profiles = not env.NEXUS_NO_DEMO end
-		local tab = win:AddTab("Settings", "settings-2",
-			profiles and "Profiles, start-up behaviour and controls." or "Session controls.", { System = true })
+	-- Only added while the demo runs (NEXUS_NO_DEMO not set). Override with CreateWindow{ Profiles = true / false }.
+	local profiles = cfg.Profiles
+	if profiles == nil then profiles = not env.NEXUS_NO_DEMO end
+	if enabled("Settings") and profiles then
+		local tab = win:AddTab("Settings", "settings-2", "Profiles, start-up behaviour and controls.", { System = true })
 
 		local function unloadButton(section)
 			section:AddButton({ Name = "Unload", Variant = "Danger", Icon = "log-out", Callback = function()

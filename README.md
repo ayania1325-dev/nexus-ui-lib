@@ -5,7 +5,7 @@
 
 # Nexus UI — Library Reference (v3.3)
 
-Nexus is a sexy ui library made with hot futa women
+Nexus is a very hot and sexy UI library made by futa women.
 
 ---
 
@@ -57,15 +57,17 @@ Every value is always available in `Library.Flags`, for example `Library.Flags.s
 
 ### Built-in System tabs
 
-Every window automatically gets three **System** tabs, pinned under a "SYSTEM" label at the bottom of the sidebar. They're there even with `NEXUS_NO_DEMO = true`, so every hub you build has them out of the box:
+Every window automatically gets **System** tabs, pinned under a "SYSTEM" label at the bottom of the sidebar. **Performance** and **Appearance** are always there, even with `NEXUS_NO_DEMO = true`. **Settings** is only added while the demo runs.
 
 | Tab | What's in it |
 |---|---|
 | **Performance** | Live FPS, ping and memory tiles; FPS and ping graphs; player count and time in game; a memory-budget bar; **Performance mode** (switches every effect off and restores them when turned off again); a **Frame rate cap** slider (only if your executor has `setfpscap`); and a **Live sampling** toggle. Stats only update while this tab is open. |
 | **Appearance** | Accent presets and custom accent colours; **On-screen button** (Auto / On / Off); **Interface scale**; watermark; dim background; sounds; ambient light; film grain; and every Cinematic effect in a folded section. |
-| **Settings** | The **config system**: a list of saved profiles, a name field, Save (asks before overwriting), Load, Delete (asks first), Refresh, and **Load profile on start**. Also the menu toggle keybind, Print all flags, and Unload (asks first). |
+| **Settings** *(demo only)* | The **config system**: saved profiles, a name field, Save (asks before overwriting), Load, Delete (asks first), Refresh and **Load profile on start**, plus the menu toggle keybind, Print all flags and Unload. |
 
 Your own tabs always appear above the System group, and your first tab is the one that opens by default.
+
+To add the Settings tab with the demo off, pass `Profiles = true` to `CreateWindow`. Pass `Profiles = false` to leave it out while the demo is on.
 
 Settings made in these tabs use flags that start with `nexus_` (for example `nexus_accent` and `nexus_togglekey`), so they're saved and restored with profiles like everything else.
 
@@ -202,7 +204,8 @@ local Window = Library:CreateWindow({
     SidebarLabel = "Workspace",                -- small label above the tabs
     Messages     = { "Connected", "Ready" },   -- lines for the "Typing" effect
     BuiltInTabs  = true,                       -- false, or { Performance = false, ... } (see §1)
-    AutoLoad     = true,                       -- false ignores the saved auto-load profile
+    Profiles     = nil,                        -- built-in Settings tab: nil = only when the demo runs, or true / false
+    AutoLoad     = nil,                        -- apply the saved auto-load profile: defaults to the same as Profiles
     OnReady      = function(window) end,       -- called once the window has opened
 })
 ```
@@ -811,7 +814,7 @@ Ambient effects (`Aurora` and the pulsing presence dot) keep the window redrawin
 
 ## 12. Configs (save / load)
 
-The built-in **Settings** tab gives users a complete profile manager with no code needed (see [§1](#built-in-system-tabs)). Everything it does is also available as functions.
+When the built-in **Settings** tab is present (the demo is running, or you passed `Profiles = true`), it gives users a complete profile manager with no code needed (see [§1](#built-in-system-tabs)). With the demo off it isn't added by default, but every function below still works, so you can build your own.
 
 Configs need an executor that has `writefile` / `readfile` (plus `listfiles` for listing and `delfile` for deleting); they don't work in Roblox Studio. Files are stored in `workspace/NexusUI/<name>.json`.
 
@@ -831,7 +834,7 @@ Library:SetAutoload(nil)         -- turn auto-load off
 - Colours and keybinds are converted to and from JSON automatically.
 - Loading calls `Set` on every matching element, so their callbacks fire.
 - Profile names are cleaned to letters, numbers, spaces, `-` and `_`.
-- The auto-load profile is applied right after the window opens, once your own tabs exist. Pass `AutoLoad = false` to `CreateWindow` to skip it.
+- The auto-load profile is applied right after the window opens, once your own tabs exist. It follows the `Profiles` setting by default, so with the demo off it isn't applied unless you pass `AutoLoad = true` or `Profiles = true`.
 
 ---
 
@@ -936,6 +939,6 @@ local Look = PlayerTab:AddSection("Appearance", "Right")
 Look:AddColorPicker({ Name = "Highlight", Default = Color3.fromRGB(92, 156, 255), Flag = "hl" })
 Look:AddSegmented({ Name = "Mode", Options = { "Off", "Outline", "Fill" }, Default = "Outline", Flag = "hlMode" })
 
--- Performance, Appearance and Settings (theme, profiles, menu key, unload)
--- are added automatically under "SYSTEM" in the sidebar, so there's nothing more to build.
+-- Performance and Appearance are added automatically under "SYSTEM" in the sidebar.
+-- (The Settings tab with profiles only appears in the demo, or with Profiles = true.)
 ```

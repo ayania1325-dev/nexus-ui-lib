@@ -1,5 +1,4 @@
 
-
 ----------------------------------------------------------------------
 -- SERVICES
 ----------------------------------------------------------------------
@@ -4638,13 +4637,11 @@ Library._buildSystemTabs = function(win, cfg)
 	end
 
 	------------------------------------------------ SETTINGS
-	-- With the demo running this holds the full profile system. With NEXUS_NO_DEMO set it only
-	-- offers Unload (override either way with CreateWindow{ Profiles = true / false }).
-	if enabled("Settings") then
-		local profiles = cfg.Profiles
-		if profiles == nil then profiles = not env.NEXUS_NO_DEMO end
-		local tab = win:AddTab("Settings", "settings-2",
-			profiles and "Profiles, start-up behaviour and controls." or "Session controls.", { System = true })
+	-- Only added while the demo runs (NEXUS_NO_DEMO not set). Override with CreateWindow{ Profiles = true / false }.
+	local profiles = cfg.Profiles
+	if profiles == nil then profiles = not env.NEXUS_NO_DEMO end
+	if enabled("Settings") and profiles then
+		local tab = win:AddTab("Settings", "settings-2", "Profiles, start-up behaviour and controls.", { System = true })
 
 		local function unloadButton(section)
 			section:AddButton({ Name = "Unload", Variant = "Danger", Icon = "log-out", Callback = function()
@@ -4660,12 +4657,6 @@ Library._buildSystemTabs = function(win, cfg)
 					},
 				})
 			end })
-		end
-
-		if not profiles then
-			local session = tab:AddSection("Session")
-			unloadButton(session)
-			return
 		end
 
 		local canFiles = Library:CanSaveConfigs()

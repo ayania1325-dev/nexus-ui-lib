@@ -3,15 +3,16 @@
 
 
 
-# Nexus UI — Library Reference (v3.2)
+# Nexus UI — Library Reference (v3.3)
 
-Nexus is a single-file interface library for Roblox. One script gives you a draggable window with a sidebar, tabs, collapsible section cards and 18 kinds of controls, plus notifications, dialogs, popovers, right-click menus, themes and config saving.
+Nexus is a sexy ui library made with hot futa women
 
 ---
 
 ## Contents
 
 1. [Quick start](#1-quick-start)
+   - [Built-in System tabs](#built-in-system-tabs)
 2. [Loading the library](#2-loading-the-library)
 3. [Core concepts](#3-core-concepts)
 4. [Library](#4-library)
@@ -53,6 +54,27 @@ Section:AddSlider({
 ```
 
 Every value is always available in `Library.Flags`, for example `Library.Flags.speed`.
+
+### Built-in System tabs
+
+Every window automatically gets three **System** tabs, pinned under a "SYSTEM" label at the bottom of the sidebar. They're there even with `NEXUS_NO_DEMO = true`, so every hub you build has them out of the box:
+
+| Tab | What's in it |
+|---|---|
+| **Performance** | Live FPS, ping and memory tiles; FPS and ping graphs; player count and time in game; a memory-budget bar; **Performance mode** (switches every effect off and restores them when turned off again); a **Frame rate cap** slider (only if your executor has `setfpscap`); and a **Live sampling** toggle. Stats only update while this tab is open. |
+| **Appearance** | Accent presets and custom accent colours; **On-screen button** (Auto / On / Off); **Interface scale**; watermark; dim background; sounds; ambient light; film grain; and every Cinematic effect in a folded section. |
+| **Settings** | The **config system**: a list of saved profiles, a name field, Save (asks before overwriting), Load, Delete (asks first), Refresh, and **Load profile on start**. Also the menu toggle keybind, Print all flags, and Unload (asks first). |
+
+Your own tabs always appear above the System group, and your first tab is the one that opens by default.
+
+Settings made in these tabs use flags that start with `nexus_` (for example `nexus_accent` and `nexus_togglekey`), so they're saved and restored with profiles like everything else.
+
+To turn them off, or keep only some:
+
+```lua
+Library:CreateWindow({ Title = "My Hub", BuiltInTabs = false })                       -- none
+Library:CreateWindow({ Title = "My Hub", BuiltInTabs = { Performance = false } })     -- Appearance + Settings only
+```
 
 ---
 
@@ -138,8 +160,15 @@ Callbacks run in their own thread and are wrapped in `pcall`. If one errors, you
 | `Library:SetPreset(name)` | Applies a built-in accent preset with a colour-wave animation. See [§10](#10-themes-and-appearance). |
 | `Library:SetBlur(on)` | Shows or hides a dim, vignetted backdrop behind the window. It doesn't blur the 3D world; the name is kept from v3.0. |
 | `Library:SetWatermark(on)` | Shows or hides the stats pill in the top-left corner. |
+| `Library:SetToggleButton(mode)` | On-screen button mode: `"Auto"`, `"Always"` or `"Never"` (`true` = Always, `false` = Never). |
+| `Library:SetScale(scale)` | Interface scale: `"Auto"` to fit the screen, or a number such as `1`, `0.875` or `0.75`. |
 | `Library:SaveConfig(name)` | Saves all flags to `workspace/NexusUI/<name>.json`. Returns `ok, err`. Executor only. |
 | `Library:LoadConfig(name)` | Loads a saved config and applies it to every flagged element. Returns `ok, err`. Executor only. |
+| `Library:ListConfigs()` | Returns a sorted array of saved profile names (needs `listfiles`). |
+| `Library:DeleteConfig(name)` | Deletes a profile. Returns `ok, err` (needs `delfile`). |
+| `Library:SetAutoload(name)` | Sets the profile applied automatically when a window starts. `nil` clears it. Returns `ok, err`. |
+| `Library:GetAutoload()` | Returns the auto-load profile name, or `nil`. |
+| `Library:CanSaveConfigs()` | `true` if this environment can read and write files. |
 | `Library:Unload()` | Destroys every instance and disconnects every connection. |
 
 ### Fields
@@ -153,7 +182,7 @@ Callbacks run in their own thread and are wrapped in `pcall`. If one errors, you
 | `Library.Tokens` | The design-token table. See [§15](#15-customising-tokens). |
 | `Library.Presets` | The built-in accent presets. |
 | `Library.FX` | Which effects are on (`name → bool`). Change them with `Window:SetEffect`. |
-| `Library.Settings` | `{ Sounds = false, Blur = false, Watermark = false }`. You can set `Settings.Sounds` directly. |
+| `Library.Settings` | `{ Sounds, Blur, Watermark, ToggleButton = "Auto", Scale = "Auto" }`. Use the matching `Set…` methods to change them; `Settings.Sounds` can be set directly. |
 | `Library.FPS` | Current client frame rate (updated twice a second). |
 | `Library.Ping` | Last measured ping in ms (updated while the watermark is visible). |
 
@@ -164,7 +193,7 @@ Callbacks run in their own thread and are wrapped in `pcall`. If one errors, you
 ```lua
 local Window = Library:CreateWindow({
     Title        = "My Hub",                   -- default "Nexus"
-    Version      = "v1.0",                     -- version pill text, default "v3.2"
+    Version      = "v1.0",                     -- version pill text, default "v3.3"
     Width        = 780,                        -- default 780
     Height       = 540,                        -- default 540
     ToggleKey    = Enum.KeyCode.RightShift,    -- default RightShift
@@ -172,17 +201,19 @@ local Window = Library:CreateWindow({
     Search       = true,                       -- false hides the title-bar search field
     SidebarLabel = "Workspace",                -- small label above the tabs
     Messages     = { "Connected", "Ready" },   -- lines for the "Typing" effect
+    BuiltInTabs  = true,                       -- false, or { Performance = false, ... } (see §1)
+    AutoLoad     = true,                       -- false ignores the saved auto-load profile
     OnReady      = function(window) end,       -- called once the window has opened
 })
 ```
 
-The window scales down automatically on small screens, in crisp steps (1, 0.875, 0.75, 0.625, 0.5).
+The window scales down automatically on small screens, in crisp steps (1, 0.875, 0.75, 0.625, 0.5). You can force a size with `Library:SetScale` or from Appearance → Interface scale.
 
 ### Methods
 
 | Method | Description |
 |---|---|
-| `Window:AddTab(name, icon, description)` | Adds a sidebar tab and its page. `icon` and `description` are optional. Returns a [Tab](#6-tab). |
+| `Window:AddTab(name, icon, description, opts)` | Adds a sidebar tab and its page. `icon`, `description` and `opts` are optional. `opts.System = true` puts the tab in the bottom System group. Returns a [Tab](#6-tab). |
 | `Window:SelectTab(tab, force)` | Switches to a tab. `force = true` replays the entry animation even if it's already active. |
 | `Window:SetVisible(bool)` | Shows or hides the window with its fade/scale animation. |
 | `Window:Toggle()` | Flips visibility. Does nothing during the splash screen. |
@@ -201,7 +232,17 @@ The window scales down automatically on small screens, in crisp steps (1, 0.875,
 | `Window.Tabs` / `Window.Active` | All tabs, and the selected tab. |
 | `Window.Main` | The window's main frame, if you want to parent your own UI to it. |
 
-When the window is hidden, a round reopen button appears on the left edge of the screen, which is useful on mobile.
+### On-screen button
+
+A round button with the logo opens and closes the menu, which is handy on mobile. **Drag it** to move it anywhere; a short tap toggles the window. Its visibility has three modes:
+
+| Mode | Behaviour |
+|---|---|
+| `"Auto"` (default) | Shown only while the window is hidden. |
+| `"Always"` | Always on screen. |
+| `"Never"` | Never shown. |
+
+Set it from Appearance → Interface → On-screen button, or in code with `Library:SetToggleButton("Always")`.
 
 ---
 
@@ -770,18 +811,27 @@ Ambient effects (`Aurora` and the pulsing presence dot) keep the window redrawin
 
 ## 12. Configs (save / load)
 
-Configs need an executor that has `writefile` / `readfile`; they don't work in Roblox Studio. Files are stored in `workspace/NexusUI/<name>.json`.
+The built-in **Settings** tab gives users a complete profile manager with no code needed (see [§1](#built-in-system-tabs)). Everything it does is also available as functions.
+
+Configs need an executor that has `writefile` / `readfile` (plus `listfiles` for listing and `delfile` for deleting); they don't work in Roblox Studio. Files are stored in `workspace/NexusUI/<name>.json`.
 
 ```lua
 local ok, err = Library:SaveConfig("default")
 if not ok then warn(err) end
 
-local ok2, err2 = Library:LoadConfig("default")
+Library:LoadConfig("default")
+print(table.concat(Library:ListConfigs(), ", "))   -- "default, pvp, ..."
+Library:DeleteConfig("old")
+
+Library:SetAutoload("default")   -- applied automatically next time a window starts
+Library:SetAutoload(nil)         -- turn auto-load off
 ```
 
-- Only elements with a `Flag` are saved.
+- Only elements with a `Flag` are saved. That includes the built-in `nexus_…` settings (theme, effects, menu key and so on).
 - Colours and keybinds are converted to and from JSON automatically.
 - Loading calls `Set` on every matching element, so their callbacks fire.
+- Profile names are cleaned to letters, numbers, spaces, `-` and `_`.
+- The auto-load profile is applied right after the window opens, once your own tabs exist. Pass `AutoLoad = false` to `CreateWindow` to skip it.
 
 ---
 
@@ -815,6 +865,7 @@ Old glyph strings still work and map to the matching icon: `◈ ▣ ☰ ⌨ ✦ 
 | Right-click a control | Context menu (reset to default, copy flag name, and so on). |
 | Click a section title | Fold or unfold the section. |
 | Drag the title bar | Move the window. |
+| Drag the on-screen button | Move it; tap to toggle the window. |
 | `–` / `×` buttons | Minimize / hide. |
 
 Change the toggle key at runtime with:
@@ -885,26 +936,6 @@ local Look = PlayerTab:AddSection("Appearance", "Right")
 Look:AddColorPicker({ Name = "Highlight", Default = Color3.fromRGB(92, 156, 255), Flag = "hl" })
 Look:AddSegmented({ Name = "Mode", Options = { "Off", "Outline", "Fill" }, Default = "Outline", Flag = "hlMode" })
 
--- Settings tab
-local SettingsTab = Window:AddTab("Settings", "settings-2")
-local General = SettingsTab:AddSection("General")
-General:AddDropdown({ Name = "Theme", Options = { "Nexus", "Violet", "Ember", "Mint", "Rose", "Gold" }, Default = "Nexus",
-    Callback = function(v) Library:SetPreset(v) end })
-General:AddKeybind({ Name = "Menu key", Default = Enum.KeyCode.RightShift, OnChange = function(k) if k then Window.ToggleKey = k end end })
-
-local Profiles = SettingsTab:AddSection("Profiles", "Right")
-local name = Profiles:AddTextbox({ Name = "Profile", Default = "default" })
-Profiles:AddButton({ Name = "Save", Variant = "Primary", Icon = "download", Callback = function()
-    local ok, err = Library:SaveConfig(name:Get())
-    Library:Notify({ Title = ok and "Saved" or "Failed", Content = ok and "Profile saved." or tostring(err), Type = ok and "Success" or "Error" })
-end })
-Profiles:AddButton({ Name = "Load", Variant = "Secondary", Icon = "upload", Callback = function()
-    Library:LoadConfig(name:Get())
-end })
-Profiles:AddButton({ Name = "Unload", Variant = "Danger", Icon = "log-out", Callback = function()
-    Library:Dialog({ Title = "Unload?", Content = "The menu will close.", Buttons = {
-        { Text = "Cancel" },
-        { Text = "Unload", Variant = "Danger", Callback = function() Library:Unload() end },
-    } })
-end })
+-- Performance, Appearance and Settings (theme, profiles, menu key, unload)
+-- are added automatically under "SYSTEM" in the sidebar, so there's nothing more to build.
 ```

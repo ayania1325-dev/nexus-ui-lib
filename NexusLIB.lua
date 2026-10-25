@@ -1,4 +1,5 @@
 
+
 ----------------------------------------------------------------------
 -- SERVICES
 ----------------------------------------------------------------------
@@ -4478,7 +4479,11 @@ function Library:CreateWindow(cfg)
 		if first then win:SelectTab(first, true) end
 		updateMobile()
 		-- apply the auto-load profile once the user's own tabs exist
-		if cfg.AutoLoad ~= false then
+		-- auto-load belongs to the profile system, so it follows the same rule (demo on by default)
+		local autoLoad = cfg.AutoLoad
+		if autoLoad == nil then autoLoad = cfg.Profiles end
+		if autoLoad == nil then autoLoad = not env.NEXUS_NO_DEMO end
+		if autoLoad then
 			local auto = Library:GetAutoload()
 			if auto then
 				local ok = Library:LoadConfig(auto)
@@ -4632,9 +4637,37 @@ Library._buildSystemTabs = function(win, cfg)
 		cinema:AddButton({ Name = "Play glitch once", Callback = function() win:Glitch() end })
 	end
 
-	------------------------------------------------ SETTINGS (config system)
+	------------------------------------------------ SETTINGS
+	-- With the demo running this holds the full profile system. With NEXUS_NO_DEMO set it only
+	-- offers Unload (override either way with CreateWindow{ Profiles = true / false }).
 	if enabled("Settings") then
-		local tab = win:AddTab("Settings", "settings-2", "Profiles, start-up behaviour and controls.", { System = true })
+		local profiles = cfg.Profiles
+		if profiles == nil then profiles = not env.NEXUS_NO_DEMO end
+		local tab = win:AddTab("Settings", "settings-2",
+			profiles and "Profiles, start-up behaviour and controls." or "Session controls.", { System = true })
+
+		local function unloadButton(section)
+			section:AddButton({ Name = "Unload", Variant = "Danger", Icon = "log-out", Callback = function()
+				Library:Dialog({
+					Title = "Unload the interface?", Content = "This removes the menu and disconnects every listener. Unsaved changes will be lost.",
+					Buttons = {
+						{ Text = "Cancel" },
+						{ Text = "Unload", Variant = "Danger", Callback = function()
+							win:SetVisible(false)
+							task.wait(M.Exit + 0.1)
+							Library:Unload()
+						end },
+					},
+				})
+			end })
+		end
+
+		if not profiles then
+			local session = tab:AddSection("Session")
+			unloadButton(session)
+			return
+		end
+
 		local canFiles = Library:CanSaveConfigs()
 
 		local prof = tab:AddSection("Profiles")
@@ -4709,19 +4742,7 @@ Library._buildSystemTabs = function(win, cfg)
 			end
 			Library:Notify({ Title = "Flags printed", Content = "Open the output window to see them.", Type = "Success" })
 		end })
-		controls:AddButton({ Name = "Unload", Variant = "Danger", Icon = "log-out", Callback = function()
-			Library:Dialog({
-				Title = "Unload the interface?", Content = "This removes the menu and disconnects every listener. Unsaved changes will be lost.",
-				Buttons = {
-					{ Text = "Cancel" },
-					{ Text = "Unload", Variant = "Danger", Callback = function()
-						win:SetVisible(false)
-						task.wait(M.Exit + 0.1)
-						Library:Unload()
-					end },
-				},
-			})
-		end })
+		unloadButton(controls)
 	end
 end
 

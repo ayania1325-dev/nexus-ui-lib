@@ -1,3 +1,4 @@
+
 ----------------------------------------------------------------------
 -- SERVICES
 ----------------------------------------------------------------------
@@ -144,7 +145,7 @@ local Library = {
 		GradientBorder = false, Glow = false, Brackets = false, Visualizer = false, Typing = false, Scramble = false,
 		Stars = false, Cursor = false,
 	},
-	Settings = { Sounds = false, Blur = false, Watermark = false },
+	Settings = { Sounds = false, Blur = false, Watermark = false, ToggleButton = "Auto", Scale = "Auto" },
 	FPS = 60, Ping = 0, _uiScale = 1, _alive = true,
 	_connections = {}, _spinners = {}, _steppers = {}, _painters = {},
 }
@@ -3512,12 +3513,14 @@ function Library:CreateWindow(cfg)
 		local steps = Tokens.UIScaleSteps
 		local chosen = steps[#steps]
 		for _, st in ipairs(steps) do if st <= f then chosen = st break end end
+		if type(Library.Settings.Scale) == "number" then chosen = Library.Settings.Scale end
 		win.ScaleValue = chosen
 		Library._uiScale = chosen
 		if Layers.OverlayScale then Layers.OverlayScale.Scale = chosen end
 		if not animating then uiScale.Scale = chosen end
 	end
 	fit()
+	win._fit = fit
 	if workspace.CurrentCamera then
 		track(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fit))
 	end
@@ -3543,7 +3546,7 @@ function Library:CreateWindow(cfg)
 	local titleLbl = Text(brand, "Title", { Text = titleText, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 1, 0), LayoutOrder = 2 })
 	local version = create("Frame", { Size = UDim2.fromOffset(0, Z.Pill), AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = C.Surface3,
 		BorderSizePixel = 0, LayoutOrder = 3, Parent = brand }, { corner(R.Pill) })
-	local versionLbl = Text(version, "MonoSm", { Text = cfg.Version or "v3.2", AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 1, 0) })
+	local versionLbl = Text(version, "MonoSm", { Text = cfg.Version or "v3.3", AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 1, 0) })
 	pad(S.S, 0, S.S, 0).Parent = versionLbl
 	local cineSlot = create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = 4, Parent = brand },
 		{ hlist(S.S) })
@@ -3599,7 +3602,31 @@ function Library:CreateWindow(cfg)
 	end)
 
 	local tabList = create("Frame", { Position = UDim2.fromOffset(S.S, TAB_TOP), Size = UDim2.new(1, -2 * S.S, 1, -(TAB_TOP + Z.UserCard)),
-		BackgroundTransparency = 1, ZIndex = 2, Parent = side }, { vlist(Z.TabGap) })
+		BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 2, Parent = side }, { vlist(Z.TabGap) })
+
+	-- built-in "System" tabs live in their own group pinned above the user card
+	local SYS_LABEL = S.XXL
+	local sysList = create("Frame", { Name = "System", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, S.S, 1, -(Z.UserCard + S.S)),
+		Size = UDim2.new(1, -2 * S.S, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false, ZIndex = 2, Parent = side },
+		{ vlist(Z.TabGap) })
+	local sysLabel = Text(sysList, "Label", { Text = "SYSTEM", Size = UDim2.new(1, 0, 0, SYS_LABEL), LayoutOrder = 0,
+		TextYAlignment = Enum.TextYAlignment.Center })
+	pad(S.M, 0, 0, 0).Parent = sysLabel
+	local sysCount, userCount = 0, 0
+	local function layoutLists()
+		local sysH = (sysCount > 0) and (SYS_LABEL + sysCount * (Z.TabRow + Z.TabGap) + S.S) or 0
+		sysList.Visible = sysCount > 0
+		tabList.Size = UDim2.new(1, -2 * S.S, 1, -(TAB_TOP + Z.UserCard + sysH))
+	end
+	-- y of a tab button inside the sidebar, measured (works for both groups and any scale)
+	local function tabY(t)
+		local eff = side.AbsoluteSize.X / SB
+		if eff <= 0 then eff = 1 end
+		return round((t.Button.AbsolutePosition.Y - side.AbsolutePosition.Y) / eff)
+	end
+	side:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		if win.Active then task.defer(function() if win.Active then indSpring:Snap(tabY(win.Active)) end end) end
+	end)
 
 	local card = create("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, Z.UserCard),
 		BackgroundTransparency = 1, Parent = side })
@@ -3686,8 +3713,42 @@ function Library:CreateWindow(cfg)
 	local mLogo = LogoMark(mobileBtn, Z.Logo - 2)
 	mLogo.AnchorPoint = Vector2.new(0.5, 0.5)
 	mLogo.Position = UDim2.fromScale(0.5, 0.5)
-	magnetic(mobileMover, mobile, { Range = 90, Strength = 0.4, Active = function() return mobile.Visible end })
+	magnetic(mobileMover, mobile, { Range = 90, Strength = 0.4, Active = function() return mobile.Visible and not win._mobileDrag end })
 	tapSpring(create("UIScale", { Parent = mobileMover }), mobileBtn)
+
+	-- modes: "Auto" (only while the window is hidden) · "Always" · "Never"
+	local function updateMobile()
+		local mode = Library.Settings.ToggleButton
+		local show = not win._booting and ((mode == "Always") or (mode ~= "Never" and not win.Visible))
+		if show and not mobile.Visible then
+			mobile.Visible = true
+			popScale(mobileMover, 0.5)
+		elseif not show then
+			mobile.Visible = false
+		end
+	end
+	win._updateMobile = updateMobile
+
+	-- drag the button anywhere; a short tap still toggles the window
+	local mStart, mStartPos, mMoved = nil, nil, false
+	mobileBtn.InputBegan:Connect(function(input)
+		if isPress(input) then mStart, mStartPos, mMoved = Vector2.new(input.Position.X, input.Position.Y), mobile.Position, false end
+	end)
+	track(UserInputService.InputChanged:Connect(function(input)
+		if mStart and isMove(input) then
+			local d = Vector2.new(input.Position.X, input.Position.Y) - mStart
+			if not mMoved and d.Magnitude > 6 then mMoved = true; win._mobileDrag = true end
+			if mMoved then
+				mobile.Position = UDim2.new(mStartPos.X.Scale, mStartPos.X.Offset + d.X, mStartPos.Y.Scale, mStartPos.Y.Offset + d.Y)
+			end
+		end
+	end))
+	track(UserInputService.InputEnded:Connect(function(input)
+		if mStart and isPress(input) then
+			mStart = nil
+			task.defer(function() win._mobileDrag = false end)
+		end
+	end))
 
 	----------------------------------------------------------------
 	-- DRAG (spring)
@@ -3726,7 +3787,7 @@ function Library:CreateWindow(cfg)
 		local base = self.ScaleValue
 		animating = true
 		if self.Visible then
-			mobile.Visible = false
+			updateMobile()
 			holder.Visible = true
 			holder.GroupTransparency = 1
 			uiScale.Scale = base * M.OpenScale
@@ -3744,8 +3805,7 @@ function Library:CreateWindow(cfg)
 				animating = false
 				holder.Visible = false
 				uiScale.Scale = self.ScaleValue
-				mobile.Visible = true
-				popScale(mobileMover, 0.5)
+				updateMobile()
 			end)
 		end
 		Library:SetBlur(Library.Settings.Blur)
@@ -3773,7 +3833,7 @@ function Library:CreateWindow(cfg)
 		tween(t.Label, d, { TextColor3 = on and C.Text or C.TextDim })
 		tintIcon(t.Icon, on and C.Accent or C.TextMute, d)
 	end
-	local function indexOf(tab) for i, t in ipairs(win.Tabs) do if t == tab then return i end end return 1 end
+	local function indexOf(tab) return (tab.System and 1000 or 0) + (tab.Order or 0) end
 
 	local pageToken
 	function win:SelectTab(tab, force)
@@ -3782,12 +3842,12 @@ function Library:CreateWindow(cfg)
 		local prev = self.Active
 		local newIndex = indexOf(tab)
 		local dir = (prev and prev ~= tab and indexOf(prev) > newIndex) and -1 or 1
-		for i, t in ipairs(self.Tabs) do
+		for _, t in ipairs(self.Tabs) do
 			local on = (t == tab)
 			styleTab(t, on, true)
 			if on then
 				indicator.Visible = true
-				local y = TAB_TOP + (i - 1) * TAB_STEP
+				local y = tabY(t)
 				if prev == nil or force then indSpring:Snap(y) else indSpring:Set(y) end
 			end
 		end
@@ -3849,12 +3909,15 @@ function Library:CreateWindow(cfg)
 		tab.Cols.Visible = not empty
 	end
 
-	function win:AddTab(name, icon, description)
-		local tab = setmetatable({ Window = win, _count = 0, Sections = {}, Rows = {}, Name = name }, Tab)
+	function win:AddTab(name, icon, description, opts)
+		opts = opts or {}
+		local tab = setmetatable({ Window = win, _count = 0, Sections = {}, Rows = {}, Name = name, System = opts.System == true }, Tab)
+		if tab.System then sysCount = sysCount + 1; tab.Order = sysCount else userCount = userCount + 1; tab.Order = userCount end
 		local btn = create("TextButton", {
 			Size = UDim2.new(1, 0, 0, Z.TabRow), BackgroundTransparency = 1, AutoButtonColor = false, Text = "",
-			BorderSizePixel = 0, LayoutOrder = #win.Tabs + 1, ZIndex = 2, Parent = tabList,
+			BorderSizePixel = 0, LayoutOrder = tab.Order, ZIndex = 2, Parent = tab.System and sysList or tabList,
 		})
+		layoutLists()
 		local ic = Icon(icon or "circle-dot", Z.Icon, C.TextMute, btn)
 		ic.AnchorPoint = Vector2.new(0, 0.5)
 		ic.Position = UDim2.new(0, S.M, 0.5, 0)
@@ -3893,7 +3956,12 @@ function Library:CreateWindow(cfg)
 		tab.Page, tab.Scroll, tab.Cols, tab.Empty, tab.Button, tab.Label, tab.Icon = page, sf, cols, empty, btn, lb, ic
 		table.insert(win.Tabs, tab)
 		btn.MouseButton1Click:Connect(function() win:SelectTab(tab) end)
-		if #win.Tabs == 1 then
+		-- the first user tab becomes the default page (system tabs never steal focus)
+		if not tab.System and userCount == 1 then
+			if win.Active and win.Active ~= tab then
+				win.Active.Page.Visible = false
+				styleTab(win.Active, false, false)
+			end
 			win.Active = tab
 			page.Visible = true
 			page.GroupTransparency = 0
@@ -3905,7 +3973,10 @@ function Library:CreateWindow(cfg)
 
 	minBtn.MouseButton1Click:Connect(function() win:Minimize() end)
 	closeBtn.MouseButton1Click:Connect(function() win:Toggle() end)
-	mobileBtn.MouseButton1Click:Connect(function() win:Toggle() end)
+	mobileBtn.MouseButton1Click:Connect(function()
+		if mMoved then mMoved = false return end
+		win:Toggle()
+	end)
 	track(UserInputService.InputBegan:Connect(function(input, gp)
 		if gp then return end
 		if input.KeyCode == win.ToggleKey then
@@ -4385,6 +4456,12 @@ function Library:CreateWindow(cfg)
 		if on and effects[name] then effects[name].enable() end
 	end
 
+	-- built-in Performance / Appearance / Settings tabs (always present unless BuiltInTabs = false)
+	if cfg.BuiltInTabs ~= false and Library._buildSystemTabs then
+		local ok, err = pcall(Library._buildSystemTabs, win, cfg)
+		if not ok then warn("[Nexus] built-in tabs failed: " .. tostring(err)) end
+	end
+
 	----------------------------------------------------------------
 	-- STARTUP
 	----------------------------------------------------------------
@@ -4393,12 +4470,259 @@ function Library:CreateWindow(cfg)
 		win._booting = false
 		win:SetVisible(true)
 		popScale(logo, 0.6)
-		if win.Active then win:SelectTab(win.Active, true) end
+		local first = win.Active
+		if not first then
+			for _, t in ipairs(win.Tabs) do if not t.System then first = t break end end
+			first = first or win.Tabs[1]
+		end
+		if first then win:SelectTab(first, true) end
+		updateMobile()
+		-- apply the auto-load profile once the user's own tabs exist
+		if cfg.AutoLoad ~= false then
+			local auto = Library:GetAutoload()
+			if auto then
+				local ok = Library:LoadConfig(auto)
+				if ok then Library:Notify({ Title = "Profile loaded", Content = "Applied " .. auto .. ".json on start.", Type = "Success", Duration = 3 }) end
+			end
+		end
 		if Library.FX.Scramble then scramble(titleLbl, titleText, 0.6) end
 		fire(cfg.OnReady, win)
 	end)
 
 	return win
+end
+
+----------------------------------------------------------------------
+-- BUILT-IN SYSTEM TABS  (Performance · Appearance · Settings)
+--   Added to every window, demo or not. Opt out with CreateWindow{ BuiltInTabs = false }
+--   or pick some: BuiltInTabs = { Performance = true, Appearance = true, Settings = false }
+----------------------------------------------------------------------
+local CINEMATIC_EFFECTS = {
+	{ "Stars", "Star field" }, { "Cursor", "Cursor follower" }, { "Particles", "Particle network" }, { "Grid", "Holo grid" },
+	{ "Scanline", "Scanline sweep" }, { "Spotlight", "Cursor spotlight" }, { "Glitch", "Glitch bursts" }, { "Comet", "Comet border" },
+	{ "GradientBorder", "Gradient border" }, { "Glow", "Outer glow" }, { "Brackets", "Corner brackets" },
+	{ "Visualizer", "Audio visualizer" }, { "Typing", "Typing status" }, { "Scramble", "Text scramble" },
+}
+local SCALE_OPTIONS = { Auto = "Auto", ["100%"] = 1, ["88%"] = 0.875, ["75%"] = 0.75, ["63%"] = 0.625 }
+
+Library._buildSystemTabs = function(win, cfg)
+	local want = cfg.BuiltInTabs
+	local function enabled(name) return type(want) ~= "table" or want[name] ~= false end
+	local refs = { cine = {} }
+
+	-- performance mode: switch every effect off (and restore it afterwards)
+	function refs.setPerformanceMode(on)
+		if on then
+			refs.saved = {}
+			for name, v in pairs(Library.FX) do refs.saved[name] = v end
+			if refs.aurora then refs.aurora:Set(false) else win:SetEffect("Aurora", false) end
+			if refs.noise then refs.noise:Set(false) else win:SetEffect("Noise", false) end
+			for i, e in ipairs(CINEMATIC_EFFECTS) do
+				if refs.cine[i] then refs.cine[i]:Set(false) else win:SetEffect(e[1], false) end
+			end
+		elseif refs.saved then
+			local saved = refs.saved
+			refs.saved = nil
+			if refs.aurora then refs.aurora:Set(saved.Aurora) else win:SetEffect("Aurora", saved.Aurora) end
+			if refs.noise then refs.noise:Set(saved.Noise) else win:SetEffect("Noise", saved.Noise) end
+			for i, e in ipairs(CINEMATIC_EFFECTS) do
+				if refs.cine[i] then refs.cine[i]:Set(saved[e[1]] == true) else win:SetEffect(e[1], saved[e[1]] == true) end
+			end
+		end
+	end
+
+	------------------------------------------------ PERFORMANCE
+	if enabled("Performance") then
+		local tab = win:AddTab("Performance", "monitor", "Live client performance for this session.", { System = true })
+		local liveOn = true
+
+		local live = tab:AddSection("Live")
+		local stats = live:AddStats({ { Name = "FPS" }, { Name = "Ping", Suffix = "ms" }, { Name = "Memory", Suffix = "MB", Thousands = true } })
+		local fpsGraph = live:AddGraph({ Name = "Frame rate", Max = 144, Suffix = " fps", Tooltip = "Client frames per second" })
+		local pingGraph = live:AddGraph({ Name = "Ping", Max = 300, Suffix = " ms", Tooltip = "Round trip to the server" })
+
+		local session = tab:AddSection("Session", "Right")
+		local sessionStats = session:AddStats({ { Name = "Players" }, { Name = "In game", Suffix = "s", Thousands = true } })
+		local memBar = session:AddProgress({ Name = "Memory budget", Default = 0, Tooltip = "Client memory against a 2 GB budget" })
+
+		local tuning = tab:AddSection("Tuning", "Right")
+		if typeof(setfpscap) == "function" then
+			local current = 60
+			if typeof(getfpscap) == "function" then pcall(function() current = getfpscap() end) end
+			current = tonumber(current) or 60
+			if current <= 0 or current > 360 then current = 360 end
+			tuning:AddSlider({ Name = "Frame rate cap", Min = 30, Max = 360, Default = math.clamp(current, 30, 360), Suffix = " fps",
+				Flag = "nexus_fpscap", Callback = function(v) pcall(setfpscap, v) end })
+		end
+		tuning:AddToggle({ Name = "Performance mode", Description = "Turns off every visual effect", Flag = "nexus_perfmode",
+			Callback = function(v) refs.setPerformanceMode(v) end })
+		tuning:AddToggle({ Name = "Live sampling", Description = "Update these stats while this tab is open", Default = true,
+			Callback = function(v) liveOn = v end })
+
+		local StatsService = game:GetService("Stats")
+		task.spawn(function()
+			while Library._alive and win.Holder.Parent do
+				if liveOn and win.Visible and win.Active == tab then
+					local fps = Library.FPS
+					local ping, mem = 0, 0
+					pcall(function() ping = round(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+					pcall(function() mem = round(StatsService:GetTotalMemoryUsageMb()) end)
+					Library.Ping = ping
+					stats:Set(1, fps); stats:Set(2, ping); stats:Set(3, mem)
+					fpsGraph:Push(fps)
+					pingGraph:Push(ping)
+					sessionStats:Set(1, #Players:GetPlayers())
+					sessionStats:Set(2, round(workspace.DistributedGameTime))
+					memBar:Set(math.clamp(mem / 2048 * 100, 0, 100))
+				end
+				task.wait(0.5)
+			end
+		end)
+	end
+
+	------------------------------------------------ APPEARANCE
+	if enabled("Appearance") then
+		local tab = win:AddTab("Appearance", "palette", "Theme, interface and visual effects.", { System = true })
+
+		local theme = tab:AddSection("Theme")
+		local accentPicker, accent2Picker
+		theme:AddDropdown({ Name = "Accent preset", Options = { "Nexus", "Violet", "Ember", "Mint", "Rose", "Gold" }, Default = "Nexus",
+			Callback = function(v)
+				Library:SetPreset(v)
+				local p = Presets[v]
+				if p and accentPicker then accentPicker:Set(p[1], true); accent2Picker:Set(p[2], true) end
+				setFlag({ Flag = "nexus_accent" }, C.Accent)
+				setFlag({ Flag = "nexus_accent2" }, C.Accent2)
+			end })
+		accentPicker = theme:AddColorPicker({ Name = "Accent colour", Description = "Repaints the whole interface", Default = C.Accent,
+			Flag = "nexus_accent", Callback = function(c) Library:SetAccent(c, nil) end })
+		accent2Picker = theme:AddColorPicker({ Name = "Secondary accent", Description = "Used in gradients", Default = C.Accent2,
+			Flag = "nexus_accent2", Callback = function(c) Library:SetAccent(nil, c) end })
+
+		local iface = tab:AddSection("Interface", "Right")
+		iface:AddSegmented({ Name = "On-screen button", Description = "Auto shows it while the menu is hidden",
+			Options = { "Auto", "On", "Off" }, Width = 0.5, Flag = "nexus_button",
+			Default = (Library.Settings.ToggleButton == "Always" and "On") or (Library.Settings.ToggleButton == "Never" and "Off") or "Auto",
+			Callback = function(v) Library:SetToggleButton((v == "On" and "Always") or (v == "Off" and "Never") or "Auto") end })
+		iface:AddDropdown({ Name = "Interface scale", Options = { "Auto", "100%", "88%", "75%", "63%" }, Default = "Auto", Flag = "nexus_scale",
+			Callback = function(v) Library:SetScale(SCALE_OPTIONS[v]) end })
+		iface:AddToggle({ Name = "Watermark", Description = "Stats pill in the top-left corner", Default = Library.Settings.Watermark,
+			Flag = "nexus_watermark", Callback = function(v) Library:SetWatermark(v) end })
+		iface:AddToggle({ Name = "Dim background", Description = "Darkens the game behind the window", Default = Library.Settings.Blur,
+			Flag = "nexus_dim", Callback = function(v) Library:SetBlur(v) end })
+		iface:AddToggle({ Name = "Interface sounds", Default = Library.Settings.Sounds, Flag = "nexus_sounds",
+			Callback = function(v) Library.Settings.Sounds = v end })
+
+		local ambient = tab:AddSection("Ambient")
+		refs.aurora = ambient:AddToggle({ Name = "Ambient light", Description = "Soft colour drifting behind the window", Default = Library.FX.Aurora,
+			Flag = "nexus_fx_aurora", Callback = function(v) win:SetEffect("Aurora", v) end })
+		refs.noise = ambient:AddToggle({ Name = "Film grain", Description = "Faint texture on the window", Default = Library.FX.Noise,
+			Flag = "nexus_fx_noise", Callback = function(v) win:SetEffect("Noise", v) end })
+
+		local cinema = tab:AddSection("Cinematic", "Right", { Collapsed = true })
+		cinema:AddLabel("Optional effects. Everything here is off by default.")
+		cinema:AddToggle({ Name = "Enable all", Description = "Turns every effect below on or off", Callback = function(v)
+			for _, t in ipairs(refs.cine) do t:Set(v) end
+		end })
+		cinema:AddSeparator()
+		for i, e in ipairs(CINEMATIC_EFFECTS) do
+			refs.cine[i] = cinema:AddToggle({ Name = e[2], Default = Library.FX[e[1]] == true, Flag = "nexus_fx_" .. string.lower(e[1]),
+				Callback = function(v) win:SetEffect(e[1], v) end })
+		end
+		cinema:AddButton({ Name = "Play glitch once", Callback = function() win:Glitch() end })
+	end
+
+	------------------------------------------------ SETTINGS (config system)
+	if enabled("Settings") then
+		local tab = win:AddTab("Settings", "settings-2", "Profiles, start-up behaviour and controls.", { System = true })
+		local canFiles = Library:CanSaveConfigs()
+
+		local prof = tab:AddSection("Profiles")
+		if not canFiles then
+			prof:AddLabel("Saving profiles needs an executor with file access (writefile / readfile). Roblox Studio can't write files.")
+		end
+		local nameBox
+		local saved = prof:AddDropdown({ Name = "Saved profiles", Description = "Pick one to fill in the name", Options = Library:ListConfigs(),
+			Callback = function(v) if v and nameBox then nameBox:Set(v) end end })
+		nameBox = prof:AddTextbox({ Name = "Profile name", Default = Library:GetAutoload() or "default", Placeholder = "default" })
+		local function refresh() saved:Refresh(Library:ListConfigs()) end
+		local function currentName()
+			local n = tostring(nameBox:Get()):gsub("[^%w%-_ ]", "")
+			return n ~= "" and n or "default"
+		end
+		local function doSave(n)
+			local ok, err = Library:SaveConfig(n)
+			Library:Notify({ Title = ok and "Profile saved" or "Couldn't save", Content = ok and ("Saved as " .. n .. ".json") or tostring(err),
+				Type = ok and "Success" or "Error" })
+			refresh()
+		end
+		prof:AddButton({ Name = "Save profile", Variant = "Primary", Icon = "download", Callback = function()
+			local n = currentName()
+			if table.find(Library:ListConfigs(), n) then
+				Library:Dialog({ Title = "Overwrite " .. n .. "?", Content = "A profile with this name already exists. Saving replaces it with your current settings.",
+					Buttons = { { Text = "Cancel" }, { Text = "Overwrite", Variant = "Primary", Callback = function() doSave(n) end } } })
+			else
+				doSave(n)
+			end
+		end })
+		prof:AddButton({ Name = "Load profile", Variant = "Secondary", Icon = "upload", Callback = function()
+			local n = currentName()
+			local ok, err = Library:LoadConfig(n)
+			Library:Notify({ Title = ok and "Profile loaded" or "Couldn't load", Content = ok and ("Applied " .. n .. ".json") or tostring(err),
+				Type = ok and "Success" or "Error" })
+		end })
+		prof:AddButton({ Name = "Delete profile", Variant = "Danger", Icon = "trash", Callback = function()
+			local n = currentName()
+			Library:Dialog({ Title = "Delete " .. n .. "?", Content = "This removes " .. n .. ".json from disk. It can't be undone.",
+				Buttons = { { Text = "Cancel" }, { Text = "Delete", Variant = "Danger", Callback = function()
+					local ok, err = Library:DeleteConfig(n)
+					Library:Notify({ Title = ok and "Profile deleted" or "Couldn't delete", Content = ok and (n .. ".json was removed.") or tostring(err),
+						Type = ok and "Success" or "Error" })
+					refresh()
+				end } } })
+		end })
+		prof:AddButton({ Name = "Refresh list", Description = "Rescan the NexusUI folder", Callback = refresh })
+
+		local startup = tab:AddSection("Start-up", "Right")
+		local autoLabel
+		local function autoText()
+			local a = Library:GetAutoload()
+			return a and ("Auto-load: <b>" .. escapeRich(a) .. "</b>") or "No profile loads automatically."
+		end
+		startup:AddToggle({ Name = "Load profile on start", Description = "Applies the profile named on the left", Default = Library:GetAutoload() ~= nil,
+			Callback = function(v)
+				local ok, err = Library:SetAutoload(v and currentName() or nil)
+				if not ok then Library:Notify({ Title = "Couldn't change auto-load", Content = tostring(err), Type = "Error" }) end
+				if autoLabel then autoLabel:SetText(autoText()) end
+			end })
+		autoLabel = startup:AddLabel(autoText())
+
+		local controls = tab:AddSection("Controls", "Right")
+		controls:AddKeybind({ Name = "Toggle menu", Description = "Show or hide the window", Default = win.ToggleKey, Flag = "nexus_togglekey",
+			OnChange = function(k) if k then win.ToggleKey = k end end })
+		controls:AddButton({ Name = "Print all flags", Description = "Writes every flag to the output", Callback = function()
+			print("[Nexus] flags")
+			for k, v in pairs(Library.Flags) do
+				if typeof(v) == "table" then v = "{" .. table.concat(v, ", ") .. "}"
+				elseif typeof(v) == "Color3" then v = toHex(v) end
+				print("  " .. k .. " = " .. tostring(v))
+			end
+			Library:Notify({ Title = "Flags printed", Content = "Open the output window to see them.", Type = "Success" })
+		end })
+		controls:AddButton({ Name = "Unload", Variant = "Danger", Icon = "log-out", Callback = function()
+			Library:Dialog({
+				Title = "Unload the interface?", Content = "This removes the menu and disconnects every listener. Unsaved changes will be lost.",
+				Buttons = {
+					{ Text = "Cancel" },
+					{ Text = "Unload", Variant = "Danger", Callback = function()
+						win:SetVisible(false)
+						task.wait(M.Exit + 0.1)
+						Library:Unload()
+					end },
+				},
+			})
+		end })
+	end
 end
 
 ----------------------------------------------------------------------
@@ -4420,19 +4744,96 @@ local function decodeValue(v)
 	return v
 end
 
+local function ensureFolder()
+	if typeof(isfolder) == "function" and typeof(makefolder) == "function" and not isfolder(CONFIG_DIR) then makefolder(CONFIG_DIR) end
+end
+local function cleanName(name)
+	name = tostring(name or ""):gsub("[^%w%-_ ]", "")
+	return name ~= "" and name or "default"
+end
+
+function Library:CanSaveConfigs()
+	return typeof(writefile) == "function" and typeof(readfile) == "function"
+end
+
 function Library:SaveConfig(name)
 	if typeof(writefile) ~= "function" then return false, "Saving needs an executor with writefile" end
+	name = cleanName(name)
 	local data = {}
 	for flag, v in pairs(self.Flags) do data[flag] = encodeValue(v) end
 	local ok, err = pcall(function()
-		if typeof(isfolder) == "function" and typeof(makefolder) == "function" and not isfolder(CONFIG_DIR) then makefolder(CONFIG_DIR) end
+		ensureFolder()
 		writefile(CONFIG_DIR .. "/" .. name .. ".json", HttpService:JSONEncode(data))
 	end)
 	return ok, err
 end
 
+-- names of every saved profile (without .json), sorted
+function Library:ListConfigs()
+	local out = {}
+	if typeof(listfiles) ~= "function" then return out end
+	pcall(function()
+		ensureFolder()
+		for _, path in ipairs(listfiles(CONFIG_DIR)) do
+			local n = tostring(path):match("([^/\\]+)%.json$")
+			if n then table.insert(out, n) end
+		end
+	end)
+	table.sort(out)
+	return out
+end
+
+function Library:DeleteConfig(name)
+	if typeof(delfile) ~= "function" then return false, "Deleting needs an executor with delfile" end
+	name = cleanName(name)
+	local ok, err = pcall(function() delfile(CONFIG_DIR .. "/" .. name .. ".json") end)
+	if ok and self:GetAutoload() == name then self:SetAutoload(nil) end
+	return ok, err
+end
+
+-- profile applied automatically when a window starts (nil clears it)
+function Library:SetAutoload(name)
+	if typeof(writefile) ~= "function" then return false, "Auto-load needs an executor with writefile" end
+	local ok, err = pcall(function()
+		ensureFolder()
+		local path = CONFIG_DIR .. "/autoload.txt"
+		if name == nil then
+			if typeof(delfile) == "function" and (typeof(isfile) ~= "function" or isfile(path)) then delfile(path) else writefile(path, "") end
+		else
+			writefile(path, cleanName(name))
+		end
+	end)
+	return ok, err
+end
+
+function Library:GetAutoload()
+	if typeof(readfile) ~= "function" then return nil end
+	local ok, name = pcall(function()
+		local path = CONFIG_DIR .. "/autoload.txt"
+		if typeof(isfile) == "function" and not isfile(path) then return nil end
+		return readfile(path)
+	end)
+	if ok and type(name) == "string" and name ~= "" then return name end
+	return nil
+end
+
+-- on-screen toggle button: "Auto" (only while hidden), "Always", "Never"  (true = Always, false = Never)
+function Library:SetToggleButton(mode)
+	if mode == true then mode = "Always" elseif mode == false then mode = "Never" end
+	if mode ~= "Always" and mode ~= "Never" then mode = "Auto" end
+	self.Settings.ToggleButton = mode
+	if self.Window and self.Window._updateMobile then self.Window._updateMobile() end
+end
+
+-- interface scale: "Auto" (fit the screen) or a number such as 1, 0.875, 0.75
+function Library:SetScale(scale)
+	self.Settings.Scale = (type(scale) == "number") and scale or "Auto"
+	if self.Window and self.Window._fit then self.Window._fit() end
+end
+
 function Library:LoadConfig(name)
 	if typeof(readfile) ~= "function" then return false, "Loading needs an executor with readfile" end
+	name = cleanName(name)
 	local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_DIR .. "/" .. name .. ".json")) end)
 	if not ok then return false, "Profile not found" end
 	for flag, v in pairs(data) do
@@ -4474,42 +4875,10 @@ if not env.NEXUS_NO_DEMO then
 	})
 
 	------------------------------------------------ OVERVIEW
-	local overview = Window:AddTab("Overview", "layout-dashboard", "Live performance and quick actions for this session.")
-
-	local perf = overview:AddSection("Performance")
-	local stats = perf:AddStats({
-		{ Name = "Frame rate", Suffix = "" },
-		{ Name = "Latency", Suffix = "ms" },
-		{ Name = "Uptime", Suffix = "s", Thousands = true },
-	})
-	task.spawn(function()
-		local started = os.clock()
-		while Library._alive do
-			stats:Set(1, Library.FPS)
-			stats:Set(2, 48 + math.random(0, 24))
-			stats:Set(3, math.floor(os.clock() - started))
-			task.wait(1)
-		end
-	end)
-	local fpsGraph = perf:AddGraph({ Name = "Frame rate", Max = 144, Suffix = " fps", Tooltip = "Client frames per second" })
-	local netGraph = perf:AddGraph({ Name = "Network latency", Max = 200, Suffix = " ms" })
-	local memory = perf:AddProgress({ Name = "Memory budget", Default = 42 })
-	local stream = perf:AddProgress({ Name = "Asset streaming", Default = 0 })
-	task.spawn(function()
-		local t, streamed = 0, 0
-		while Library._alive do
-			t = t + 0.35
-			fpsGraph:Push(Library.FPS)
-			netGraph:Push(60 + math.sin(t * 0.7) * 22 + math.random(-6, 6))
-			memory:Set(46 + math.sin(t * 0.25) * 8)
-			streamed = streamed >= 100 and 0 or math.min(100, streamed + math.random(2, 7))
-			stream:Set(streamed)
-			task.wait(0.5)
-		end
-	end)
+	local overview = Window:AddTab("Overview", "layout-dashboard", "Quick actions and component showcase. Performance, Appearance and Settings are built in.")
 
 	local quick = overview:AddSection("Quick actions")
-	quick:AddParagraph({ Title = "Getting started", Content = "Every control in this demo is live. Changes save to flags instantly, and the Appearance tab restyles the whole interface." })
+	quick:AddParagraph({ Title = "Getting started", Content = "Every control in this demo is live. The System tabs at the bottom of the sidebar (Performance, Appearance, Settings) are added to every window automatically, even with the demo turned off." })
 	quick:AddButton({ Name = "Run diagnostics", Variant = "Primary", Icon = "zap", Async = true, DoneText = "All clear",
 		Tooltip = "Shows a loading state, then a confirmation", Callback = function()
 			task.wait(1.4)
@@ -4610,86 +4979,6 @@ if not env.NEXUS_NO_DEMO then
 	colors:AddColorPicker({ Name = "Selection colour", Description = "Used for outlines", Default = Color3.fromRGB(240, 112, 168), Flag = "col_select" })
 	colors:AddLabel("Click a swatch to open the picker. Type a hex code or choose a preset.")
 
-	------------------------------------------------ APPEARANCE
-	local appearance = Window:AddTab("Appearance", "palette", "Theme, accent colour and ambient effects.")
-
-	local theme = appearance:AddSection("Theme")
-	theme:AddDropdown({ Name = "Accent preset", Options = { "Nexus", "Violet", "Ember", "Mint", "Rose", "Gold" }, Default = "Nexus",
-		Callback = function(v) Library:SetPreset(v) end })
-	theme:AddColorPicker({ Name = "Custom accent", Description = "Repaints the whole interface", Default = C.Accent,
-		Callback = function(c) Library:SetAccent(c, nil) end })
-	theme:AddToggle({ Name = "Ambient light", Description = "Soft accent glow in the corner", Default = Library.FX.Aurora,
-		Callback = function(v) Window:SetEffect("Aurora", v) end })
-	theme:AddToggle({ Name = "Film grain", Description = "Faint texture on the window", Default = Library.FX.Noise,
-		Callback = function(v) Window:SetEffect("Noise", v) end })
-	theme:AddToggle({ Name = "Dim background", Description = "Darkens the game behind the window", Default = false,
-		Callback = function(v) Library:SetBlur(v) end })
-	theme:AddToggle({ Name = "Watermark", Description = "Compact stats pill in the corner", Default = false,
-		Callback = function(v) Library:SetWatermark(v) end })
-	theme:AddToggle({ Name = "Interface sounds", Default = false, Callback = function(v) Library.Settings.Sounds = v end })
-
-	local cinema = appearance:AddSection("Cinematic mode", nil, { Collapsed = true })
-	cinema:AddLabel("Optional effects. Everything here is off by default. Click the section title to fold it.")
-	local cineToggles = {}
-	local cineList = {
-		{ "Stars", "Star field" }, { "Cursor", "Cursor follower" },
-		{ "Particles", "Particle network" }, { "Grid", "Holo grid" }, { "Scanline", "Scanline sweep" }, { "Spotlight", "Cursor spotlight" },
-		{ "Glitch", "Glitch bursts" }, { "Comet", "Comet border" }, { "GradientBorder", "Gradient border" }, { "Glow", "Outer glow" },
-		{ "Brackets", "Corner brackets" }, { "Visualizer", "Audio visualizer" }, { "Typing", "Typing status" }, { "Scramble", "Text scramble" },
-	}
-	cinema:AddToggle({ Name = "Enable all", Description = "Turns every effect below on or off", Callback = function(v)
-		for _, t in ipairs(cineToggles) do t:Set(v) end
-	end })
-	cinema:AddSeparator()
-	for _, e in ipairs(cineList) do
-		table.insert(cineToggles, cinema:AddToggle({ Name = e[2], Default = Library.FX[e[1]], Callback = function(v) Window:SetEffect(e[1], v) end }))
-	end
-	cinema:AddButton({ Name = "Play glitch once", Callback = function() Window:Glitch() end })
-
-	------------------------------------------------ SETTINGS
-	local settings = Window:AddTab("Settings", "settings-2", "Shortcuts, configuration profiles and session.")
-
-	local general = settings:AddSection("General")
-	general:AddKeybind({ Name = "Toggle window", Description = "Show or hide Nexus", Default = Enum.KeyCode.RightShift,
-		OnChange = function(k) if k then Window.ToggleKey = k end end })
-	general:AddButton({ Name = "Print all flags", Description = "Writes every flag to the output", Callback = function()
-		print("[Nexus] flags")
-		for k, v in pairs(Library.Flags) do
-			if typeof(v) == "table" then v = "{" .. table.concat(v, ", ") .. "}"
-			elseif typeof(v) == "Color3" then v = toHex(v) end
-			print("  " .. k .. " = " .. tostring(v))
-		end
-		Library:Notify({ Title = "Flags printed", Content = "Open the output window to see them.", Type = "Success" })
-	end })
-	general:AddButton({ Name = "Unload Nexus", Variant = "Danger", Icon = "log-out", Callback = function()
-		Library:Dialog({
-			Title = "Unload Nexus?", Content = "This removes the interface and disconnects every listener. Unsaved changes will be lost.",
-			Buttons = {
-				{ Text = "Cancel", Variant = "Secondary" },
-				{ Text = "Unload", Variant = "Danger", Callback = function()
-					Window:SetVisible(false)
-					task.wait(M.Exit + 0.1)
-					Library:Unload()
-				end },
-			},
-		})
-	end })
-	general:AddLabel("Tip: right-click any control to reset it or copy its flag name.")
-
-	local profiles = settings:AddSection("Profiles")
-	local profileName = profiles:AddTextbox({ Name = "Profile name", Default = "default", Placeholder = "default" })
-	profiles:AddButton({ Name = "Save profile", Variant = "Primary", Icon = "download", Callback = function()
-		local ok, err = Library:SaveConfig(profileName:Get())
-		Library:Notify({ Title = ok and "Profile saved" or "Couldn't save", Content = ok and ("Saved as " .. profileName:Get() .. ".json") or tostring(err), Type = ok and "Success" or "Error" })
-	end })
-	profiles:AddButton({ Name = "Load profile", Variant = "Secondary", Icon = "upload", Callback = function()
-		local ok, err = Library:LoadConfig(profileName:Get())
-		Library:Notify({ Title = ok and "Profile loaded" or "Couldn't load", Content = ok and ("Applied " .. profileName:Get() .. ".json") or tostring(err), Type = ok and "Success" or "Error" })
-	end })
-	profiles:AddLabel("Profiles are stored in workspace/NexusUI and require an executor with file access.")
-
-	local about = settings:AddSection("About")
-	about:AddParagraph({ Title = "Nexus 3.2", Content = "A single-file interface library for Roblox. Built on design tokens, vector icons, springs and floating popovers." })
 end
 
 return Library
